@@ -527,7 +527,7 @@ if user_text:
 
     # Decide when to recommend: after 3 inputs or user asks 'recommend' or 'surprise me'
     trigger_terms = ["recommend", "suggest", "surprise me", "اقترح", "اقترح لي", "نصيحة"]
-    if any(t in user_text.lower() for t in trigger_terms) or st.session_state.q_count >= 3:
+    if any(t in user_text.lower() for t in trigger_terms) or st.session_state.q_count >= 4:
         # Build user query string from prefs
         user_desc = " ; ".join(list(st.session_state.prefs.values()))
         # find top K matches

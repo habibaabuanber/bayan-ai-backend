@@ -269,7 +269,7 @@ def chat(req: ChatRequest):
 
     # Decide whether to recommend or ask more questions
     trigger_terms = ["recommend", "suggest", "surprise", "اقترح", "رشح", "نصيحة"]
-    need_recommend = any(t in user_text.lower() for t in trigger_terms) or len(user_prefs) >= 3
+    need_recommend = any(t in user_text.lower() for t in trigger_terms) or len(user_prefs) >= 4
 
     if need_recommend:
         # Build full preference string
@@ -286,9 +286,12 @@ def chat(req: ChatRequest):
             books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('summary','')}\n\n"
 
         prompt = f"""
-You are a friendly librarian. The user likes: {full_query}.
-Explain in {lang} briefly in 2-3 sentences why these books match the user's preferences:
+You are a warm librarian. The user described preferences: {full_query}.
+Below are candidate books. For each book, write one short line (in {lang}) explaining why it matches the user's preferences.
+Also at top produce a short friendly header recommending these books.
+
 {books_block}
+Reply in {lang}.
 """
         resp = client.chat.completions.create(
             model="gpt-4o",
@@ -297,17 +300,30 @@ Explain in {lang} briefly in 2-3 sentences why these books match the user's pref
         reply = resp.choices[0].message.content
         conversation_history.append({"role": "assistant", "content": reply})
 
-        return {"reply": reply, "books": best_books, "follow_up": False }
+        reply = resp.choices[0].message.content
 
+        response = {
+            "reply": reply,
+            "books": best_books,
+            "follow_up": False
+        }
+
+        conversation_history.clear()
+        user_prefs.clear()
+
+        return response
     else:
         # Ask a dynamic follow-up question
         history_text = "\n".join([f"{h['role']}: {h['content']}" for h in conversation_history])
         prompt = f"""
-You are a curious librarian. Ask ONE short question that follows logically based on the user's last answer, to recommend a book later.
-Conversation so far:
-{history_text}
-Respond in {lang}.
-"""
+
+        You are a friendly, curious librarian. Ask one short, natural follow-up question that helps select a book.
+        Do not ask more than one question. Keep it specific and not repetitive.
+        If the user seems to have already given genre/mood/length or examples, ask about details like favorite authors, pace, or setting.
+        Respond in {lang}.
+        Conversation:
+        {history_text}
+        """
         resp = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}]
