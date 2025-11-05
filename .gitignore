@@ -1,0 +1,8 @@
+# *.npy
+# *.csv
+# *.jsonl
+*.env
+__pycache__/
+# books_dataset_enriched.jsonl
+# books_embeddings.npy
+# books_metadata.json
