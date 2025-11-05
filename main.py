@@ -145,9 +145,17 @@ from openai import OpenAI
 import requests
 from dotenv import load_dotenv
 # ------------------- CONFIG -------------------
-load_dotenv() 
+
 import os
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env file
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "")  # optional
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
 BOOKS_FILE = "books_dataset_enriched.jsonl"
 EMB_FILE = "books_embeddings.npy"
 META_FILE = "books_metadata.json"
@@ -216,15 +224,32 @@ def ensure_cover(book: Dict[str, Any]):
 
 # ------------------- FASTAPI APP -------------------
 app = FastAPI()
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # ممكن بعدين تعمليها لدومين محدد
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# @app.get("/")
+# def root():
+#     return {"message": "Backend is working ✅"}
+@app.get("/")
+def health_check():
+    return {"status": "ok", "service": "Bayan AI Librarian"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
 conversation_history: List[Dict[str, Any]] = []
 user_prefs: Dict[str, Any] = {}
 
 class ChatRequest(BaseModel):
     message: str
-
-@app.get("/")
-def root():
-    return {"message": "Backend is working ✅"}
 
 @app.post("/chat")
 def chat(req: ChatRequest):
