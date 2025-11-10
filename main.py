@@ -389,11 +389,8 @@ def chat(req: ChatRequest):
             books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('summary','')}\n\n"
 
         prompt = f"""
-You are a warm librarian. The user described preferences: {full_query}.
-Below are candidate books. For each book, write one short line (in {lang}) explaining why it matches the user's preferences.
-Also at top produce a short friendly header recommending these books.
-
-{books_block}
+You are a helpful librarian. The user described preferences: {full_query}.
+Below are candidate books from {books_block}. For each book, write one short line in {lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
 Reply in {lang}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
