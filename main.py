@@ -386,13 +386,14 @@ def chat(req: ChatRequest):
         print("books:", best_books)
         books_block = ""
         for b in best_books:
-            books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('summary','')}\n\n"
+            if b.get('language', '').lower() == lang.lower():  # بس الكتب اللي اللغة بتاعتها = lang
+                books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
 
         prompt = f"""
 You are a helpful librarian. The user described preferences: {full_query}.
 Below are candidate books from {books_block}. For each book, write one short line in {lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
-start the recommendation with a short introductory sentence.
-Reply in {lang} and remove the books with other languages than {lang}.
+start the recommendation with a short introductory sentence without hello or welcomeing .
+Reply in {lang} don't suggest not existing book here in the {books_block}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
         resp = client.chat.completions.create(
@@ -405,7 +406,7 @@ Reply in {lang} and remove the books with other languages than {lang}.
         response = {
             "session_id": sid,
             "reply": reply,
-            "books": best_books,
+            "books":[b for b in best_books if b.get('language','').lower() == lang.lower()],
             "follow_up": False,
         }
 
