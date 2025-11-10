@@ -185,30 +185,30 @@ def embed_text(text: str):
     resp = client.embeddings.create(model=EMBED_MODEL, input=text)
     return resp.data[0].embedding
 
-# def find_top_k(query: str, k: int = TOP_K):
-#     query_emb = np.array(embed_text(query), dtype=np.float32).reshape(1, -1)
-#     sims = cosine_similarity(query_emb, embeddings)[0]
-#     idx = np.argsort(sims)[::-1][:k]
-#     results = []
-#     for i in idx:
-#         m = metas[int(i)].copy()
-#         m["_score"] = float(sims[int(i)])
-#         results.append(m)
-#     return results
-def find_top_k(query: str, user_lang: str = None, k: int = TOP_K):
+def find_top_k(query: str, k: int = TOP_K):
     query_emb = np.array(embed_text(query), dtype=np.float32).reshape(1, -1)
     sims = cosine_similarity(query_emb, embeddings)[0]
-    idx = np.argsort(sims)[::-1]
+    idx = np.argsort(sims)[::-1][:k]
     results = []
     for i in idx:
         m = metas[int(i)].copy()
-        if user_lang and m.get("language") != user_lang:
-            continue
         m["_score"] = float(sims[int(i)])
         results.append(m)
-        if len(results) >= k:
-            break
     return results
+# def find_top_k(query: str, user_lang: str = None, k: int = TOP_K):
+#     query_emb = np.array(embed_text(query), dtype=np.float32).reshape(1, -1)
+#     sims = cosine_similarity(query_emb, embeddings)[0]
+#     idx = np.argsort(sims)[::-1]
+#     results = []
+#     for i in idx:
+#         m = metas[int(i)].copy()
+#         if user_lang and m.get("language") != user_lang:
+#             continue
+#         m["_score"] = float(sims[int(i)])
+#         results.append(m)
+#         if len(results) >= k:
+#             break
+#     return results
 
 def get_cover_google(isbn: str):
     if not isbn:
@@ -377,13 +377,13 @@ def chat(req: ChatRequest):
         print("🟣 [Stage] Generating recommendations...")
         full_query = " ; ".join(session["user_prefs"].values())
         print(f"📋 Full user query: {full_query}")
-
-        best_books = find_top_k(full_query, user_lang=lang, k=TOP_K)
+# , user_lang=lang
+        best_books = find_top_k(full_query, k=TOP_K)
         print(f"📚 Found {len(best_books)} similar books")
-
+        
         for b in best_books:
             ensure_cover(b)
-
+        print("books:", best_books)
         books_block = ""
         for b in best_books:
             books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('summary','')}\n\n"
@@ -391,7 +391,8 @@ def chat(req: ChatRequest):
         prompt = f"""
 You are a helpful librarian. The user described preferences: {full_query}.
 Below are candidate books from {books_block}. For each book, write one short line in {lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
-Reply in {lang}.
+start the recommendation with a short introductory sentence.
+Reply in {lang} and remove the books with other languages than {lang}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
         resp = client.chat.completions.create(
@@ -412,7 +413,7 @@ Reply in {lang}.
         print(json.dumps(response, indent=2, ensure_ascii=False))
         print("------------------------------------------------\n")
 
-        clear_session(sid)
+        # clear_session(sid)
         return response
 
     # --- Follow-up question stage ---
