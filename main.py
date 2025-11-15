@@ -580,8 +580,9 @@ def chat(req: ChatRequest):
                 matched_books.append(b)
             else:
                 print(f"❌ Book language NOT matched: {b.get('language', '')} → User wanted: {normalized_reading_lang}")
-        
-        # ⚠️ صحح الخطأ هنا - استخدم reading_lang بدل lang
+        if not matched_books: 
+            books_block += f" There is no preferred language books but there are books in {normalize_language(best_books[0].get('language', ''))}: Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
+
         prompt = f"""
 You are a helpful librarian. The user described preferences: {full_query},Reply in {normalized_lang}.
 Below are candidate books from {books_block}. For each book, write one short line in {normalized_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
