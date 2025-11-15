@@ -583,10 +583,11 @@ def chat(req: ChatRequest):
         
         # ⚠️ صحح الخطأ هنا - استخدم reading_lang بدل lang
         prompt = f"""
-You are a helpful librarian. The user described preferences: {full_query}.
+You are a helpful librarian. The user described preferences: {full_query},Reply in {normalized_lang}.
 Below are candidate books from {books_block}. For each book, write one short line in {normalized_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
 start the recommendation with a short introductory sentence without hello or welcomeing .
-Reply in {normalized_lang} don't suggest not existing book here in the {books_block}.
+don't suggest not existing book here  {books_block}.
+respond in {lang}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
         resp = client.chat.completions.create(
