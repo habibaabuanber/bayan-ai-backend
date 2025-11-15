@@ -177,8 +177,45 @@ def load_embeddings():
         metas = json.load(f)
     return embeddings, metas
 
-books_raw = load_books(BOOKS_FILE)[:200]
-embeddings, metas = load_embeddings()
+# books_raw = load_books(BOOKS_FILE)[:200]
+# embeddings, metas = load_embeddings()
+# ------------ LOAD MULTIPLE DATASETS ------------
+def load_multiple_jsonl(paths: List[str]):
+    all_books = []
+    for p in paths:
+        print(f"Loading books from: {p}")
+        all_books.extend(load_books(p))
+    return all_books
+
+def load_multiple_embeddings(emb_paths: List[str], meta_paths: List[str]):
+    all_embs = []
+    all_metas = []
+
+    for emb_file, meta_file in zip(emb_paths, meta_paths):
+        print(f"Loading embeddings from: {emb_file}")
+        embs = np.load(emb_file)
+        all_embs.append(embs)
+
+        print(f"Loading metadata from: {meta_file}")
+        with open(meta_file, "r", encoding="utf-8") as f:
+            metas = json.load(f)
+        all_metas.extend(metas)
+
+    # concatenate embeddings vertically
+    final_embs = np.vstack(all_embs)
+    return final_embs, all_metas
+
+
+# ---------- LOAD DATASETS ----------
+books_raw = load_multiple_jsonl([
+    "books_dataset_enriched.jsonl",
+    "second_dataset_clean.jsonl"
+])
+
+embeddings, metas = load_multiple_embeddings(
+    ["books_embeddings.npy", "second_dataset_embeddings.npy"],
+    ["books_metadata.json", "second_dataset_metadata.json"]
+)
 
 # ------------------- HELPERS -------------------
 def embed_text(text: str):
@@ -319,6 +356,14 @@ def sweep_expired_sessions():
     for sid in to_delete:
         SESSIONS.pop(sid, None)
 
+def normalize_language(lang):
+    lang = str(lang).lower().strip()
+    if lang in ['eng', 'english', 'en-us', 'en_us', 'en']:
+        return 'en' 
+    elif lang in ['ar', 'ara', 'arabic']:
+        return 'ar'
+    return lang
+
 
 @app.post("/chat")
 def chat(req: ChatRequest):
@@ -368,32 +413,121 @@ def chat(req: ChatRequest):
     except:
         lang = "en"
     print(f"🌍 Detected language: {lang}")
+    normalized_lang = normalize_language(lang)
+    print(f"🌍 Detected language: {lang} → Normalized: {normalized_lang}")
 
     trigger_terms = ["recommend", "suggest", "surprise", "اقترح", "رشح", "نصيحة"]
     need_recommend = any(t in user_text.lower() for t in trigger_terms) or len(session["user_prefs"]) >= 4
+    
+    last_assistant_msg = None
+    if session["conversation_history"]:
+        for msg in reversed(session["conversation_history"]):
+            if msg["role"] == "assistant":
+                last_assistant_msg = msg["content"]
+                break
 
-    # --- Recommendation stage ---
-    if need_recommend:
+    is_language_response = (
+        last_assistant_msg and 
+        any(phrase in last_assistant_msg for phrase in ["أي لغة تفضل أن تقرأ بها الكتب؟ العربية أم الإنجليزية؟", "Which language do you prefer to read books in? Arabic or English?"]) and
+        any(word in user_text.lower() for word in ["english", "eng", "en", "الإنجليزية", "انجليزي", "انجلش", "عربي", "عربية", "arabic", "ar"])
+    )
+
+    if is_language_response and "preferred_reading_lang" not in session:
+        print("🟡 [Stage] Processing language preference...")
+        
+        # تحديد لغة القراءة المفضلة من رد المستخدم
+        if any(word in user_text.lower() for word in ["english", "eng", "en", "الإنجليزية", "انجليزي", "انجلش"]):
+            session["preferred_reading_lang"] = "en"
+            if normalized_lang == "ar":
+                confirmation = "حسناً، سأوصي لك بكتب باللغة الإنجليزية 📚"
+            else:
+                confirmation = "Great! I'll recommend books in English 📚"
+        else:
+            session["preferred_reading_lang"] = "ar"
+            if normalized_lang == "ar":
+                confirmation = "حسناً، سأوصي لك بكتب باللغة العربية 📚"
+                follow_up = "هل تريد أن أبدأ التوصية؟"
+
+            else:
+                confirmation = "Great! I'll recommend books in Arabic 📚"
+                follow_up = "Should I start the recommendation?"
+
+        print(f"📖 User preferred reading language: {session['preferred_reading_lang']}")
+        full_reply = f"{confirmation} {follow_up}"
+        session["conversation_history"].append({"role": "assistant", "content": full_reply})
+        touch_session(sid)
+
+        response = {"session_id": sid, "reply": full_reply, "books": [], "follow_up": True}
+
+        print("\n🔵 --- Outgoing Response (Language Confirmation) ---")
+        print(json.dumps(response, indent=2, ensure_ascii=False))
+        print("------------------------------------------------\n")
+
+        return response
+
+    # 2. ثم تحقق إذا وصلنا لمرحلة التوصية ولكن لم نسأل عن اللغة بعد
+    if need_recommend and "preferred_reading_lang" not in session:
+        print("🟡 [Stage] Asking for preferred reading language...")
+        
+        if normalized_lang == "ar":
+            question = "أي لغة تفضل أن تقرأ بها الكتب؟ العربية أم الإنجليزية؟"
+        else:
+            question = "Which language do you prefer to read books in? Arabic or English?"
+        
+        session["conversation_history"].append({"role": "assistant", "content": question})
+        touch_session(sid)
+
+        response = {"session_id": sid, "reply": question, "books": [], "follow_up": True}
+
+        print("\n🔵 --- Outgoing Response (Language Question) ---")
+        print(json.dumps(response, indent=2, ensure_ascii=False))
+        print("------------------------------------------------\n")
+
+        return response
+
+    # 3. ثم التوصية بعد تحديد اللغة
+    if need_recommend and "preferred_reading_lang" in session:
         print("🟣 [Stage] Generating recommendations...")
+        
+        # استخدام لغة القراءة المفضلة بدلاً من لغة المستخدم الأساسية
+        reading_lang = session["preferred_reading_lang"]
+        normalized_reading_lang = normalize_language(reading_lang)
+        print(f"📖 Using preferred reading language: {reading_lang} → Normalized: {normalized_reading_lang}")
+
         full_query = " ; ".join(session["user_prefs"].values())
         print(f"📋 Full user query: {full_query}")
-# , user_lang=lang
+        
         best_books = find_top_k(full_query, k=TOP_K)
         print(f"📚 Found {len(best_books)} similar books")
         
         for b in best_books:
             ensure_cover(b)
+        
         print("books:", best_books)
+        
+        # Debug info
+        print(f"🔍 Language Debug:")
+        print(f"   User reading lang: {reading_lang} → Normalized: {normalized_reading_lang}")
+        print(f"   Book languages: {[b.get('language') for b in best_books]}")
+        print(f"   Normalized book languages: {[normalize_language(b.get('language', '')) for b in best_books]}")
+        
+        matched_books = []
         books_block = ""
         for b in best_books:
-            if b.get('language', '').lower() == lang.lower():  # بس الكتب اللي اللغة بتاعتها = lang
+            book_lang_normalized = normalize_language(b.get('language', ''))
+            if book_lang_normalized == normalized_reading_lang:
+                print(f"✅ Book language matched: {b.get('language', '')} → User reading lang: {normalized_reading_lang}") 
                 books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
-
+                matched_books.append(b)
+            else:
+                print(f"❌ Book language NOT matched: {b.get('language', '')} → User wanted: {normalized_reading_lang}")
+        
+        # ⚠️ صحح الخطأ هنا - استخدم reading_lang بدل lang
         prompt = f"""
 You are a helpful librarian. The user described preferences: {full_query}.
-Below are candidate books from {books_block}. For each book, write one short line in {lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
+Below are candidate books from {books_block}. For each book, write one short line in {reading_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
 start the recommendation with a short introductory sentence without hello or welcomeing .
-Reply in {lang} don't suggest not existing book here in the {books_block}.
+Reply in {reading_lang} don't suggest not existing book here in the {books_block}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
         resp = client.chat.completions.create(
@@ -403,10 +537,11 @@ Reply in {lang} don't suggest not existing book here in the {books_block}.
         reply = resp.choices[0].message.content
         print("✅ [LLM Reply Received]")
 
+        # ⚠️ صحح الخطأ هنا - استخدم matched_books بدل best_books
         response = {
             "session_id": sid,
             "reply": reply,
-            "books":[b for b in best_books if b.get('language','').lower() == lang.lower()],
+            "books": matched_books,  # ⬅️ هنا التصحيح
             "follow_up": False,
         }
 
@@ -414,10 +549,9 @@ Reply in {lang} don't suggest not existing book here in the {books_block}.
         print(json.dumps(response, indent=2, ensure_ascii=False))
         print("------------------------------------------------\n")
 
-        # clear_session(sid)
         return response
 
-    # --- Follow-up question stage ---
+    # 4. وأخيراً follow-up question
     else:
         print("🟢 [Stage] Generating follow-up question...")
         history_text = "\n".join([f"{h['role']}: {h['content']}" for h in session["conversation_history"]])
