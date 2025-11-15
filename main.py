@@ -270,11 +270,70 @@ def get_cover_openlibrary(isbn: str):
         return None
     return f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg"
 
+import requests
+import urllib.parse
+
+def get_cover_by_title(title: str, authors: str = ""):
+    try:
+        clean_title = title.strip().replace('"', '').replace(':', '')
+        query = f"intitle:{clean_title}"
+        
+        if authors:
+            first_author = authors.split('/')[0].split(',')[0].strip()
+            clean_author = first_author.replace('"', '').replace(':', '')
+            query += f" inauthor:{clean_author}"
+        
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://www.googleapis.com/books/v1/volumes?q={encoded_query}&maxResults=3"
+        
+        print(f"🔍 Searching for cover: {query}")
+        
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        
+        items = data.get("items", [])
+        print(f"📚 Found {len(items)} items")
+        
+        if items:
+            # نجرب كل النتائج عشان نلاقي واحدة فيها صورة
+            for item in items:
+                vol = item.get("volumeInfo", {})
+                imgs = vol.get("imageLinks", {})
+                
+                # نطبع معلومات الكتاب للتdebug
+                found_title = vol.get('title', '')
+                found_authors = vol.get('authors', [])
+                print(f"   📖 Found: '{found_title}' by {found_authors}")
+                
+                for k in ("extraLarge", "large", "medium", "small", "thumbnail"):
+                    if imgs.get(k):
+                        print(f"   ✅ Found cover: {imgs.get(k)}")
+                        return imgs.get(k)
+        
+        print("   ❌ No covers found")
+        return None
+        
+    except Exception as e:
+        print(f"   ❌ Error in get_cover_by_title: {e}")
+        return None
+    
 def ensure_cover(book: Dict[str, Any]):
     if book.get("cover_url"):
         return book["cover_url"]
+    
     isbn = book.get("isbn","")
-    cover = get_cover_google(isbn) or get_cover_openlibrary(isbn)
+    cover = None
+    
+    if isbn and isbn != "N/A" and isbn != "null":
+        cover = get_cover_google(isbn) or get_cover_openlibrary(isbn)
+        if cover:
+            print(f"✅ Found cover by ISBN: {isbn}")
+    
+    if not cover:
+        cover = get_cover_by_title(book.get('title', ''), book.get('authors', ''))
+        if cover:
+            print(f"✅ Found cover by title: {book.get('title', '')}")
+    
     book["cover_url"] = cover
     return cover
 
@@ -525,9 +584,9 @@ def chat(req: ChatRequest):
         # ⚠️ صحح الخطأ هنا - استخدم reading_lang بدل lang
         prompt = f"""
 You are a helpful librarian. The user described preferences: {full_query}.
-Below are candidate books from {books_block}. For each book, write one short line in {reading_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
+Below are candidate books from {books_block}. For each book, write one short line in {normalized_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
 start the recommendation with a short introductory sentence without hello or welcomeing .
-Reply in {reading_lang} don't suggest not existing book here in the {books_block}.
+Reply in {normalized_lang} don't suggest not existing book here in the {books_block}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
         resp = client.chat.completions.create(
