@@ -424,9 +424,229 @@ def normalize_language(lang):
     return lang
 
 
+# @app.post("/chat")
+# def chat(req: ChatRequest):
+#     # optional: sweep expired sessions occasionally
+#     sweep_expired_sessions()
+
+#     print("\n🟢 --- Incoming Request ---")
+#     print(f"Reset: {req.reset}")
+#     print(f"Session ID: {req.session_id}")
+#     print(f"Message: {req.message}")
+#     print("----------------------------\n")
+
+#     # If user asked to reset/new chat, create a fresh session
+#     if req.reset:
+#         new_sid = create_session()
+#         starter = "New chat started. Hi! What kind of books are you in the mood for?"
+#         print(f"🟡 [New Session Created] session_id={new_sid}")
+#         print("⬆️ Sending Starter Response\n")
+#         return {
+#             "session_id": new_sid,
+#             "reply": starter,
+#             "books": [],
+#             "follow_up": True,
+#         }
+
+#     # Ensure we have a session id
+#     sid = get_session(req.session_id)
+#     session = SESSIONS[sid]
+#     touch_session(sid)
+
+#     print(f"🟡 [Session Active] session_id={sid}")
+#     print(f"🧾 Current user_prefs: {list(session['user_prefs'].values())}")
+#     print(f"🕓 Last active: {time.strftime('%X', time.localtime(session['last_active']))}")
+
+#     # If no message provided, just return session id
+#     if not req.message:
+#         print("⚪ No message provided — returning Ready response.\n")
+#         return {"session_id": sid, "reply": "Ready.", "books": [], "follow_up": True}
+
+#     user_text = req.message.strip()
+#     session["conversation_history"].append({"role": "user", "content": user_text})
+#     pref_key = f"pref_{len(session['user_prefs']) + 1}"
+#     session["user_prefs"][pref_key] = user_text
+
+#     try:
+#         lang = "ar" if detect(user_text) == "ar" else "en"
+#     except:
+#         lang = "en"
+#     print(f"🌍 Detected language: {lang}")
+#     normalized_lang = normalize_language(lang)
+#     print(f"🌍 Detected language: {lang} → Normalized: {normalized_lang}")
+
+#     trigger_terms = ["recommend", "suggest", "surprise", "اقترح", "رشح", "نصيحة"]
+#     need_recommend = any(t in user_text.lower() for t in trigger_terms) or len(session["user_prefs"]) >= 4
+    
+#     last_assistant_msg = None
+#     if session["conversation_history"]:
+#         for msg in reversed(session["conversation_history"]):
+#             if msg["role"] == "assistant":
+#                 last_assistant_msg = msg["content"]
+#                 break
+
+#     is_language_response = (
+#         last_assistant_msg and 
+#         any(phrase in last_assistant_msg for phrase in ["أي لغة تفضل أن تقرأ بها الكتب؟ العربية أم الإنجليزية؟", "Which language do you prefer to read books in? Arabic or English?"]) and
+#         any(word in user_text.lower() for word in ["english", "eng", "en", "الإنجليزية", "انجليزي", "انجلش", "عربي", "عربية", "arabic", "ar"])
+#     )
+
+#     if is_language_response and "preferred_reading_lang" not in session:
+#         print("🟡 [Stage] Processing language preference...")
+        
+#         # تحديد لغة القراءة المفضلة من رد المستخدم
+#         if any(word in user_text.lower() for word in ["english", "eng", "en", "الإنجليزية", "انجليزي", "انجلش"]):
+#             session["preferred_reading_lang"] = "en"
+#             if normalized_lang == "ar":
+#                 confirmation = "حسناً، سأوصي لك بكتب باللغة الإنجليزية 📚"
+#             else:
+#                 confirmation = "Great! I'll recommend books in English 📚"
+#         else:
+#             session["preferred_reading_lang"] = "ar"
+#             if normalized_lang == "ar":
+#                 confirmation = "حسناً، سأوصي لك بكتب باللغة العربية 📚"
+#                 follow_up = "هل تريد أن أبدأ التوصية؟"
+
+#             else:
+#                 confirmation = "Great! I'll recommend books in Arabic 📚"
+#                 follow_up = "Should I start the recommendation?"
+
+#         print(f"📖 User preferred reading language: {session['preferred_reading_lang']}")
+#         full_reply = f"{confirmation} {follow_up}"
+#         session["conversation_history"].append({"role": "assistant", "content": full_reply})
+#         touch_session(sid)
+
+#         response = {"session_id": sid, "reply": full_reply, "books": [], "follow_up": True}
+
+#         print("\n🔵 --- Outgoing Response (Language Confirmation) ---")
+#         print(json.dumps(response, indent=2, ensure_ascii=False))
+#         print("------------------------------------------------\n")
+
+#         return response
+
+#     # 2. ثم تحقق إذا وصلنا لمرحلة التوصية ولكن لم نسأل عن اللغة بعد
+#     if need_recommend and "preferred_reading_lang" not in session:
+#         print("🟡 [Stage] Asking for preferred reading language...")
+        
+#         if normalized_lang == "ar":
+#             question = "أي لغة تفضل أن تقرأ بها الكتب؟ العربية أم الإنجليزية؟"
+#         else:
+#             question = "Which language do you prefer to read books in? Arabic or English?"
+        
+#         session["conversation_history"].append({"role": "assistant", "content": question})
+#         touch_session(sid)
+
+#         response = {"session_id": sid, "reply": question, "books": [], "follow_up": True}
+
+#         print("\n🔵 --- Outgoing Response (Language Question) ---")
+#         print(json.dumps(response, indent=2, ensure_ascii=False))
+#         print("------------------------------------------------\n")
+
+#         return response
+
+#     # 3. ثم التوصية بعد تحديد اللغة
+#     if need_recommend and "preferred_reading_lang" in session:
+#         print("🟣 [Stage] Generating recommendations...")
+        
+#         # استخدام لغة القراءة المفضلة بدلاً من لغة المستخدم الأساسية
+#         reading_lang = session["preferred_reading_lang"]
+#         normalized_reading_lang = normalize_language(reading_lang)
+#         print(f"📖 Using preferred reading language: {reading_lang} → Normalized: {normalized_reading_lang}")
+
+#         full_query = " ; ".join(session["user_prefs"].values())
+#         print(f"📋 Full user query: {full_query}")
+        
+#         best_books = find_top_k(full_query, k=TOP_K)
+#         print(f"📚 Found {len(best_books)} similar books")
+        
+#         for b in best_books:
+#             ensure_cover(b)
+        
+#         print("books:", best_books)
+        
+#         # Debug info
+#         print(f"🔍 Language Debug:")
+#         print(f"   User reading lang: {reading_lang} → Normalized: {normalized_reading_lang}")
+#         print(f"   Book languages: {[b.get('language') for b in best_books]}")
+#         print(f"   Normalized book languages: {[normalize_language(b.get('language', '')) for b in best_books]}")
+        
+#         matched_books = []
+#         books_block = ""
+#         for b in best_books:
+#             book_lang_normalized = normalize_language(b.get('language', ''))
+#             if book_lang_normalized == normalized_reading_lang:
+#                 print(f"✅ Book language matched: {b.get('language', '')} → User reading lang: {normalized_reading_lang}") 
+#                 books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
+#                 matched_books.append(b)
+#             else:
+#                 print(f"❌ Book language NOT matched: {b.get('language', '')} → User wanted: {normalized_reading_lang}")
+#         if not matched_books: 
+#             books_block += f" There is no preferred language books but there are books in {normalize_language(best_books[0].get('language', ''))}: Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
+
+#         prompt = f"""
+# You are a helpful librarian. The user described preferences: {full_query},Reply in {normalized_lang}.
+# Below are candidate books from {books_block}. For each book, write one short line in {normalized_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
+# start the recommendation with a short introductory sentence without hello or welcomeing .
+# don't suggest not existing book here  {books_block}.
+# respond in {lang}.
+# """
+#         print("🤖 Sending prompt to LLM for recommendation explanation...")
+#         resp = client.chat.completions.create(
+#             model="gpt-4o",
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+#         reply = resp.choices[0].message.content
+#         print("✅ [LLM Reply Received]")
+
+#         # ⚠️ صحح الخطأ هنا - استخدم matched_books بدل best_books
+#         response = {
+#             "session_id": sid,
+#             "reply": reply,
+#             "books": matched_books,  # ⬅️ هنا التصحيح
+#             "follow_up": False,
+#         }
+
+#         print("\n🔵 --- Outgoing Response (Recommendation) ---")
+#         print(json.dumps(response, indent=2, ensure_ascii=False))
+#         print("------------------------------------------------\n")
+
+#         return response
+
+#     # 4. وأخيراً follow-up question
+#     else:
+#         print("🟢 [Stage] Generating follow-up question...")
+#         history_text = "\n".join([f"{h['role']}: {h['content']}" for h in session["conversation_history"]])
+
+#         prompt = f"""
+# You are a friendly, curious librarian. Ask one short, natural follow-up question that helps select a book.
+# Do not ask more than one question. Keep it specific and not repetitive.
+# If the user seems to have already given genre/mood/length or examples, ask about details like favorite authors, pace, or setting.
+# Respond in {lang}.
+# Conversation:
+# {history_text}
+# """
+#         print("🤖 Sending prompt to LLM for follow-up question...")
+#         resp = client.chat.completions.create(
+#             model="gpt-4o",
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+#         reply = resp.choices[0].message.content
+#         print("✅ [LLM Reply Received]")
+
+#         session["conversation_history"].append({"role": "assistant", "content": reply})
+#         touch_session(sid)
+
+#         response = {"session_id": sid, "reply": reply, "books": [], "follow_up": True}
+
+#         print("\n🔵 --- Outgoing Response (Follow-up) ---")
+#         print(json.dumps(response, indent=2, ensure_ascii=False))
+#         print("------------------------------------------------\n")
+
+#         return response
+
 @app.post("/chat")
 def chat(req: ChatRequest):
-    # optional: sweep expired sessions occasionally
+    # تنظيف الجلسات المنتهية
     sweep_expired_sessions()
 
     print("\n🟢 --- Incoming Request ---")
@@ -435,7 +655,7 @@ def chat(req: ChatRequest):
     print(f"Message: {req.message}")
     print("----------------------------\n")
 
-    # If user asked to reset/new chat, create a fresh session
+    # إذا طلب المستخدم اعادة المحادثة
     if req.reset:
         new_sid = create_session()
         starter = "New chat started. Hi! What kind of books are you in the mood for?"
@@ -448,43 +668,141 @@ def chat(req: ChatRequest):
             "follow_up": True,
         }
 
-    # Ensure we have a session id
+    # التأكد من وجود جلسة
     sid = get_session(req.session_id)
     session = SESSIONS[sid]
     touch_session(sid)
 
     print(f"🟡 [Session Active] session_id={sid}")
     print(f"🧾 Current user_prefs: {list(session['user_prefs'].values())}")
-    print(f"🕓 Last active: {time.strftime('%X', time.localtime(session['last_active']))}")
 
-    # If no message provided, just return session id
+    # إذا لم يتم تقديم رسالة
     if not req.message:
         print("⚪ No message provided — returning Ready response.\n")
         return {"session_id": sid, "reply": "Ready.", "books": [], "follow_up": True}
 
     user_text = req.message.strip()
     session["conversation_history"].append({"role": "user", "content": user_text})
+
+    # حفظ التفضيلات
     pref_key = f"pref_{len(session['user_prefs']) + 1}"
     session["user_prefs"][pref_key] = user_text
 
+    # كشف اللغة
     try:
         lang = "ar" if detect(user_text) == "ar" else "en"
     except:
         lang = "en"
-    print(f"🌍 Detected language: {lang}")
     normalized_lang = normalize_language(lang)
     print(f"🌍 Detected language: {lang} → Normalized: {normalized_lang}")
 
-    trigger_terms = ["recommend", "suggest", "surprise", "اقترح", "رشح", "نصيحة"]
-    need_recommend = any(t in user_text.lower() for t in trigger_terms) or len(session["user_prefs"]) >= 4
+     
     
     last_assistant_msg = None
-    if session["conversation_history"]:
-        for msg in reversed(session["conversation_history"]):
-            if msg["role"] == "assistant":
-                last_assistant_msg = msg["content"]
-                break
+    for msg in reversed(session["conversation_history"]):
+        if msg["role"] == "assistant":
+            last_assistant_msg = msg["content"]
+            break
 
+    # كشف إذا كان رد على توصيات سابقة
+    is_response_to_recommendations = False
+    is_negative_feedback = False
+    
+    if session.get("recommended") and last_assistant_msg:
+        # تحليل إذا كان المستخدم يرد على التوصيات
+        # is_response_to_recommendations = any(keyword in last_assistant_msg.lower() for keyword in [
+        #     "recommend", "suggest", "book", "رواية", "اقترح", "كتاب"
+        # ])
+        
+        # if is_response_to_recommendations:
+        #     print(f"RESPONSE OF RECOMMENDATION:{is_response_to_recommendations}")
+        #     # كشف المشاعر باستخدام GPT
+        #     is_negative_feedback = detect_negative_feedback(user_text, session["conversation_history"], last_assistant_msg)
+        #     print(f"🎭 Detected response to recommendations - Negative: {is_negative_feedback}")
+        try:
+            prompt = f"""
+    The user just replied to your previous message.
+    Assistant's last message: "{last_assistant_msg[:200]}..."
+    User's message: "{user_text}"
+
+    Question:
+    Is the user giving feedback on the book recommendations in the assistant's message? 
+    Respond ONLY with "yes" or "no".
+    """
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10
+            )
+            gpt_response = resp.choices[0].message.content.strip().lower()
+            is_response_to_recommendations = (gpt_response == "yes")
+            print(f"RESPONSE OF RECOMMENDATION (GPT): {is_response_to_recommendations}")
+        except Exception as e:
+            print(f"❌ GPT failed to detect response: {e}")
+            is_response_to_recommendations = False
+
+        if is_response_to_recommendations:
+            # كشف المشاعر باستخدام GPT
+            is_negative_feedback = detect_negative_feedback(user_text, session["conversation_history"], last_assistant_msg)
+            print(f"🎭 Detected response to recommendations - Negative: {is_negative_feedback}")
+
+    # إذا كان رد سلبي على التوصيات
+        if is_negative_feedback:
+
+            print("🟠 [Stage] User dissatisfied with recommendations, generating follow-up questions...")
+
+            # توليد أسئلة متابعة ديناميكية
+            followup_prompt = f"""
+        The user expressed dissatisfaction with the previous book recommendations.
+
+        User message: "{user_text}"
+        Conversation context: {session['conversation_history'][-4:]}
+
+        Your task:
+        - Ask one natural follow-up question.
+        - Ask ONLY in the user's language: {normalized_lang}
+        - Do NOT apologize excessively.
+        - Do NOT analyze the books.
+        - Do NOT modify preferences.
+        - Question must be conversational and help us understand *what they didn’t like*.
+        - Do NOT return anything except the questions.
+        """
+
+            try:
+                followup_resp = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{"role": "user", "content": followup_prompt}],
+                    temperature=0.7
+                )
+                reply = followup_resp.choices[0].message.content.strip()
+            except Exception as e:
+                print(f"❌ GPT follow-up generation failed: {e}")
+                if normalized_lang == "ar":
+                    reply = "طيب، ممكن توضّح أكتر إيه اللي مخليّك مش حابب الاقتراحات السابقة؟"
+                else:
+                    reply = "Could you tell me more about what you didn’t like in the previous recommendations?"
+
+            # حفظ رسالة المساعد
+            session["conversation_history"].append({"role": "assistant", "content": reply})
+            touch_session(sid)
+
+            response = {
+                "session_id": sid,
+                "reply": reply,
+                "books": [],            # No books here
+                "follow_up": True       # Because we want the user to answer
+            }
+
+            print("\n🟠 --- Outgoing Response (Negative Feedback Follow-up Questions) ---")
+            print(json.dumps(response, indent=2, ensure_ascii=False))
+            print("--------------------------------------------------------\n")
+
+            return response
+
+    # trigger_terms = ["recommend", "suggest", "surprise", "اقترح", "رشح", "نصيحة"]
+    #  any(t in user_text.lower() for t in trigger_terms) or
+    need_recommend = len(session["user_prefs"]) >= 4
+    
     is_language_response = (
         last_assistant_msg and 
         any(phrase in last_assistant_msg for phrase in ["أي لغة تفضل أن تقرأ بها الكتب؟ العربية أم الإنجليزية؟", "Which language do you prefer to read books in? Arabic or English?"]) and
@@ -494,7 +812,6 @@ def chat(req: ChatRequest):
     if is_language_response and "preferred_reading_lang" not in session:
         print("🟡 [Stage] Processing language preference...")
         
-        # تحديد لغة القراءة المفضلة من رد المستخدم
         if any(word in user_text.lower() for word in ["english", "eng", "en", "الإنجليزية", "انجليزي", "انجلش"]):
             session["preferred_reading_lang"] = "en"
             if normalized_lang == "ar":
@@ -505,14 +822,12 @@ def chat(req: ChatRequest):
             session["preferred_reading_lang"] = "ar"
             if normalized_lang == "ar":
                 confirmation = "حسناً، سأوصي لك بكتب باللغة العربية 📚"
-                follow_up = "هل تريد أن أبدأ التوصية؟"
-
             else:
                 confirmation = "Great! I'll recommend books in Arabic 📚"
-                follow_up = "Should I start the recommendation?"
 
-        print(f"📖 User preferred reading language: {session['preferred_reading_lang']}")
-        full_reply = f"{confirmation} {follow_up}"
+        follow_up = generate_contextual_followup(session["conversation_history"], normalized_lang)
+        full_reply = f"{confirmation}\n\n{follow_up}"
+        
         session["conversation_history"].append({"role": "assistant", "content": full_reply})
         touch_session(sid)
 
@@ -524,7 +839,6 @@ def chat(req: ChatRequest):
 
         return response
 
-    # 2. ثم تحقق إذا وصلنا لمرحلة التوصية ولكن لم نسأل عن اللغة بعد
     if need_recommend and "preferred_reading_lang" not in session:
         print("🟡 [Stage] Asking for preferred reading language...")
         
@@ -544,11 +858,9 @@ def chat(req: ChatRequest):
 
         return response
 
-    # 3. ثم التوصية بعد تحديد اللغة
     if need_recommend and "preferred_reading_lang" in session:
-        print("🟣 [Stage] Generating recommendations...")
+        print("🟣 [Stage] Generating initial recommendations...")
         
-        # استخدام لغة القراءة المفضلة بدلاً من لغة المستخدم الأساسية
         reading_lang = session["preferred_reading_lang"]
         normalized_reading_lang = normalize_language(reading_lang)
         print(f"📖 Using preferred reading language: {reading_lang} → Normalized: {normalized_reading_lang}")
@@ -562,33 +874,27 @@ def chat(req: ChatRequest):
         for b in best_books:
             ensure_cover(b)
         
-        print("books:", best_books)
-        
-        # Debug info
-        print(f"🔍 Language Debug:")
-        print(f"   User reading lang: {reading_lang} → Normalized: {normalized_reading_lang}")
-        print(f"   Book languages: {[b.get('language') for b in best_books]}")
-        print(f"   Normalized book languages: {[normalize_language(b.get('language', '')) for b in best_books]}")
-        
         matched_books = []
-        books_block = ""
         for b in best_books:
             book_lang_normalized = normalize_language(b.get('language', ''))
             if book_lang_normalized == normalized_reading_lang:
-                print(f"✅ Book language matched: {b.get('language', '')} → User reading lang: {normalized_reading_lang}") 
-                books_block += f"Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
                 matched_books.append(b)
-            else:
-                print(f"❌ Book language NOT matched: {b.get('language', '')} → User wanted: {normalized_reading_lang}")
-        if not matched_books: 
-            books_block += f" There is no preferred language books but there are books in {normalize_language(best_books[0].get('language', ''))}: Title: {b['title']}\nAuthor: {b.get('authors','')}\nSummary: {b.get('short_summary','')}\n\n"
 
+        if not matched_books and best_books:
+            matched_books = best_books[:2]
+            print("⚠️ No books in preferred language, showing alternatives")
+
+        books_titles = [b['title'] for b in matched_books]
         prompt = f"""
-You are a helpful librarian. The user described preferences: {full_query},Reply in {normalized_lang}.
-Below are candidate books from {books_block}. For each book, write one short line in {normalized_lang} explaining why it matches the user's preferences. Keep the response focused only on the books and their reasons.
-start the recommendation with a short introductory sentence without hello or welcomeing .
-don't suggest not existing book here  {books_block}.
-respond in {lang}.
+You are a helpful librarian. The user described preferences: {full_query}
+
+Below are candidate books: {books_titles}
+
+For each book, write one short line in {normalized_lang} explaining why it matches the user's preferences. 
+Keep the response focused only on the books and their reasons.
+Start the recommendation with a short introductory sentence without hello or welcoming.
+Don't suggest non-existing books.
+Respond in {normalized_lang}.
 """
         print("🤖 Sending prompt to LLM for recommendation explanation...")
         resp = client.chat.completions.create(
@@ -598,48 +904,146 @@ respond in {lang}.
         reply = resp.choices[0].message.content
         print("✅ [LLM Reply Received]")
 
-        # ⚠️ صحح الخطأ هنا - استخدم matched_books بدل best_books
+        # إضافة سؤال متابعة
+        follow_up_question = generate_contextual_followup(
+            session["conversation_history"], 
+            normalized_lang, 
+            is_after_recommendation=True
+        )
+
+        full_reply = f"{reply}\n\n{follow_up_question}"
+        
+        session["conversation_history"].append({"role": "assistant", "content": full_reply})
+        session["recommended"] = True
+        touch_session(sid)
+
         response = {
             "session_id": sid,
-            "reply": reply,
-            "books": matched_books,  # ⬅️ هنا التصحيح
-            "follow_up": False,
+            "reply": full_reply,
+            "books": matched_books,
+            "follow_up": True,
         }
 
-        print("\n🔵 --- Outgoing Response (Recommendation) ---")
+        print("\n🔵 --- Outgoing Response (Initial Recommendation) ---")
         print(json.dumps(response, indent=2, ensure_ascii=False))
         print("------------------------------------------------\n")
 
         return response
 
-    # 4. وأخيراً follow-up question
     else:
         print("🟢 [Stage] Generating follow-up question...")
-        history_text = "\n".join([f"{h['role']}: {h['content']}" for h in session["conversation_history"]])
-
-        prompt = f"""
-You are a friendly, curious librarian. Ask one short, natural follow-up question that helps select a book.
-Do not ask more than one question. Keep it specific and not repetitive.
-If the user seems to have already given genre/mood/length or examples, ask about details like favorite authors, pace, or setting.
-Respond in {lang}.
-Conversation:
-{history_text}
-"""
-        print("🤖 Sending prompt to LLM for follow-up question...")
-        resp = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
+        
+        follow_up_question = generate_contextual_followup(
+            session["conversation_history"], 
+            normalized_lang, 
+            is_after_recommendation=False
         )
-        reply = resp.choices[0].message.content
-        print("✅ [LLM Reply Received]")
-
-        session["conversation_history"].append({"role": "assistant", "content": reply})
+        
+        session["conversation_history"].append({"role": "assistant", "content": follow_up_question})
         touch_session(sid)
 
-        response = {"session_id": sid, "reply": reply, "books": [], "follow_up": True}
+        response = {
+            "session_id": sid, 
+            "reply": follow_up_question,
+            "books": [], 
+            "follow_up": True
+        }
 
         print("\n🔵 --- Outgoing Response (Follow-up) ---")
         print(json.dumps(response, indent=2, ensure_ascii=False))
         print("------------------------------------------------\n")
 
         return response
+    
+def detect_negative_feedback(user_text: str, conversation_history: List[Dict], last_recommendation: str) -> bool:
+    """
+    بتكتشف إذا المستخدم مش عاجباه التوصيات من context المحادثة
+    """
+    user_text_lower = user_text.lower()
+    
+    negative_indicators = [
+        "مش ", "لا ", "ما ", "وش ", "ماذا", "غير", "تاني", "اخرى", "بديل",
+        "not", "no", "other", "different", "another", "else", "instead"
+    ]
+    
+    has_negative_indicator = any(indicator in user_text_lower for indicator in negative_indicators)
+    
+    is_short_response = len(user_text.split()) < 4
+    
+    try:
+        prompt = f"""
+Analyze if this user is expressing dissatisfaction with book recommendations.
+User message: "{user_text}"
+Last assistant recommendation: "{last_recommendation[:200]}..."
+
+Respond ONLY with "yes" or "no".
+"""
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=10
+        )
+        gpt_analysis = resp.choices[0].message.content.strip().lower()
+        print(f"🎭 GPT negative feedback analysis: {gpt_analysis}")
+        return gpt_analysis == "yes" or (has_negative_indicator and is_short_response)
+    except:
+        # fallback إذا API مش شغالة
+        return has_negative_indicator and is_short_response
+def generate_contextual_followup(conversation_history: List[Dict], user_lang: str, is_after_recommendation: bool = False) -> str:
+    """
+    بتولد أسئلة متابعة ذكية بناءً على context المحادثة
+    """
+    # نجمع معلومات من المحادثة
+    history_text = "\n".join([f"{h['role']}: {h['content']}" for h in conversation_history[-6:]])  # آخر 3 تبادلات
+    
+    if is_after_recommendation:
+        prompt = f"""
+Based on this conversation, generate ONE natural follow-up question to understand why the user might not be satisfied with the recommendations and what they'd prefer instead.
+
+Conversation:
+{history_text}
+
+Requirements:
+- Ask ONE question only
+- Be curious and helpful, not repetitive
+- Focus on understanding their specific taste better
+- Respond in {user_lang}
+"""
+    else:
+        prompt = f"""
+Based on this conversation, generate ONE natural follow-up question that helps understand the user's book preferences better.
+
+Conversation:
+{history_text}
+
+Requirements:
+- Ask ONE question only  
+- Be natural and conversational
+- Don't repeat previous questions
+- Respond in {user_lang}
+"""
+
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100
+        )
+        return resp.choices[0].message.content.strip()
+    except:
+        # Fallback questions
+        fallback_questions_ar = [
+            "ما هو آخر كتاب قرأته وأعجبك؟",
+            "هل تفضل القصص الخيالية أم الواقعية؟",
+            "أي نوع من الشخصيات تجذبك أكثر في الروايات؟",
+            "ما المزاج الذي تبحث عنه في كتابك القادم؟"
+        ]
+        fallback_questions_en = [
+            "What's the last book you read and enjoyed?",
+            "Do you prefer fictional stories or realistic ones?",
+            "What type of characters attract you most in novels?",
+            "What mood are you looking for in your next book?"
+        ]
+        import random
+        questions = fallback_questions_ar if user_lang == "ar" else fallback_questions_en
+        return random.choice(questions)
